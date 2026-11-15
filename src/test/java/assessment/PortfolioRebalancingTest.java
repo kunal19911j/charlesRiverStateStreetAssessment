@@ -1,32 +1,41 @@
 package assessment;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static assessment.RebalancingAdapter.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+@DisplayName("Portfolio Rebalancing Automation Suite")
 class PortfolioRebalancingTest {
 
+    private static final Logger logger = LoggerFactory.getLogger(PortfolioRebalancingTest.class);
     private static RebalancingAdapter application;
 
     @BeforeAll
     static void connectToApplication() throws Exception {
         String adapter = System.getProperty("rebalancing.adapter");
         if (adapter == null || adapter.trim().isEmpty()) {
+            logger.info("No external adapter specified; initializing default Mockito mock adapter.");
             application = MockitoRebalancingAdapterFactory.createMock();
         } else {
+            logger.info("Connecting to external application adapter: {}", adapter);
             application = (RebalancingAdapter) Class.forName(adapter).getDeclaredConstructor().newInstance();
         }
     }
@@ -51,66 +60,85 @@ class PortfolioRebalancingTest {
     }
 
     private static Result success(Request request, String... shares) throws Exception {
+        logger.debug("Executing rebalance request in mode: {}, totalAsset: {}, holdings: {}",
+                request.mode, request.totalAsset, request.holdings.size());
+
         Result result = application.rebalance(request);
-        assertNotNull(result);
-        assertEquals(Status.SUCCESS, result.status, result.message);
-        assertNotNull(result.positions);
-        assertNotNull(result.orders);
+        assertNotNull(result, "Application returned a null Result object");
+        assertEquals(Status.SUCCESS, result.status, "Expected SUCCESS status but got " + result.status + ": " + result.message);
+        assertNotNull(result.positions, "Positions list must not be null");
+        assertNotNull(result.orders, "Orders list must not be null");
         assertEquals(request.holdings.size(), shares.length, "Fixture must specify every holding");
         assertEquals(request.holdings.size(), result.positions.size(), "Missing or extra output positions");
 
         Map<String, Position> positions = new HashMap<>();
         for (Position position : result.positions) {
-            assertNull(positions.put(position.symbol, position), "Duplicate output: " + position.symbol);
+            assertNull(positions.put(position.symbol, position), "Duplicate output for security: " + position.symbol);
         }
 
+        // Soft assertion grouping across all holdings to report all variances/shares in a single test run
+        List<Executable> assertions = new ArrayList<>();
         for (int i = 0; i < shares.length; i++) {
             Holding holding = request.holdings.get(i);
             Position position = positions.get(holding.symbol);
-            assertNotNull(position, "Missing " + holding.symbol);
-            equalNumber(shares[i], position.signedShares, holding.symbol + " signed shares");
-            equalNumber(
-                    decimal(holding.currentPercent).subtract(decimal(holding.targetPercent)).toPlainString(),
-                    position.variance,
-                    holding.symbol + " variance"
-            );
+            assertNotNull(position, "Missing recommendation for security " + holding.symbol);
+
+            String expectedShare = shares[i];
+            assertions.add(() -> equalNumber(expectedShare, position.signedShares, holding.symbol + " signed shares"));
+
+            String expectedVariance = decimal(holding.currentPercent).subtract(decimal(holding.targetPercent)).toPlainString();
+            assertions.add(() -> equalNumber(expectedVariance, position.variance, holding.symbol + " variance"));
         }
+        assertAll("Portfolio position shares and variances", assertions);
+
+        logger.debug("Successfully validated {} positions and {} orders", result.positions.size(), result.orders.size());
         return result;
     }
 
     private static void rejected(Request request, String message) throws Exception {
+        logger.debug("Executing negative validation scenario expecting error containing: '{}'", message);
+
         Result result = application.rebalance(request);
-        assertNotNull(result);
-        assertEquals(Status.VALIDATION_ERROR, result.status);
-        assertNotNull(result.message);
-        if (message != null) {
-            assertTrue(result.message.contains(message), result.message);
-        } else {
-            assertFalse(result.message.trim().isEmpty(), "Validation must explain the invalid input");
-        }
-        assertNotNull(result.positions);
-        assertNotNull(result.orders);
-        assertTrue(result.positions.isEmpty(), "Invalid input must not produce recommendations");
-        assertTrue(result.orders.isEmpty(), "Invalid input must not queue trades");
+        assertNotNull(result, "Application returned a null Result object");
+
+        assertAll("Input validation failure contract",
+                () -> assertEquals(Status.VALIDATION_ERROR, result.status, "Status must be VALIDATION_ERROR"),
+                () -> assertNotNull(result.message, "Validation message must not be null"),
+                () -> {
+                    if (message != null) {
+                        assertTrue(result.message.contains(message),
+                                "Expected error to contain [" + message + "] but received: [" + result.message + "]");
+                    } else {
+                        assertFalse(result.message.trim().isEmpty(), "Validation must explain the invalid input");
+                    }
+                },
+                () -> assertNotNull(result.positions, "Positions list must not be null"),
+                () -> assertNotNull(result.orders, "Orders list must not be null"),
+                () -> assertTrue(result.positions.isEmpty(), "Invalid input must not produce recommendations"),
+                () -> assertTrue(result.orders.isEmpty(), "Invalid input must not queue trades")
+        );
     }
 
     @Test
     @Tag("high")
+    @DisplayName("TC_POS_001: Baseline Account ABC fractional rebalance (IBM buy 66.67, ORCL sell -45.45)")
     void TC_POS_001_baselineFractional() throws Exception {
         success(baseline(), "66.67", "0", "-45.45", "0", "0");
     }
 
     @Test
     @Tag("high")
+    @DisplayName("TC_POS_002: Baseline Account ABC whole shares truncation (IBM buy 66, ORCL sell -45)")
     void TC_POS_002_baselineWholeShares() throws Exception {
         Request r = baseline();
         r.mode = Mode.WHOLE;
         success(r, "66", "0", "-45", "0", "0");
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "TC_POS_003: Exact division with assessmentPrices={0}")
     @ValueSource(booleans = {false, true})
     @Tag("high")
+    @DisplayName("TC_POS_003: Exact integer division isolates math from floating-point rounding")
     void TC_POS_003_exactDivisionBothPriceOptions(boolean assessmentPrices) throws Exception {
         Request r = baseline();
         if (assessmentPrices) {
@@ -128,6 +156,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("high")
+    @DisplayName("TC_POS_004: Perfectly balanced portfolio produces 0 shares and queues no orders")
     void TC_POS_004_balancedPortfolio() throws Exception {
         Request r = baseline();
         r.holdings.forEach(h -> h.currentPercent = "20");
@@ -136,6 +165,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("high")
+    @DisplayName("TC_POS_005: All positions change; validates cash neutrality (Buy cost equals sell proceeds)")
     void TC_POS_005_allPositionsChange() throws Exception {
         Request r = baseline();
         String[] targets = {"25", "11", "8", "29", "27"};
@@ -153,6 +183,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("medium")
+    @DisplayName("TC_POS_006: Adding brand new position (current% = 0%, target% > 0%)")
     void TC_POS_006_newPosition() throws Exception {
         Request r = baseline();
         r.holdings.get(0).targetPercent = "10";
@@ -164,6 +195,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("medium")
+    @DisplayName("TC_POS_007: Full security liquidation (current% > 0%, target% = 0%)")
     void TC_POS_007_liquidation() throws Exception {
         Request r = baseline();
         r.holdings.get(0).targetPercent = "40";
@@ -171,9 +203,10 @@ class PortfolioRebalancingTest {
         success(r, "200", "0", "-136.36", "0", "0");
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "TC_BND_001: Sub-share variance in wholeMode={0}")
     @ValueSource(booleans = {false, true})
     @Tag("medium")
+    @DisplayName("TC_BND_001: Sub-share variance when dollar deviation is smaller than 1 unit price")
     void TC_BND_001_subShareVariance(boolean whole) throws Exception {
         Request r = baseline();
         r.totalAsset = "10000";
@@ -188,6 +221,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("medium")
+    @DisplayName("TC_BND_002: Single-stock 100% target allocation liquidating all other positions")
     void TC_BND_002_singleStockTarget() throws Exception {
         Request r = baseline();
         r.holdings.forEach(h -> {
@@ -200,6 +234,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("medium")
+    @DisplayName("TC_BND_003: Multi-decimal allocation percentages (e.g. 20.55%, 10.05%)")
     void TC_BND_003_decimalPercentages() throws Exception {
         Request r = baseline();
         r.holdings.get(0).targetPercent = "20.55";
@@ -211,6 +246,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("low")
+    @DisplayName("TC_BND_004: Large institutional portfolio ($10 Billion) without numeric overflow")
     void TC_BND_004_largePortfolio() throws Exception {
         Request r = baseline();
         r.totalAsset = "10000000000";
@@ -219,15 +255,17 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("low")
+    @DisplayName("TC_BND_005: Penny stock with micro unit price ($0.01)")
     void TC_BND_005_pennyStock() throws Exception {
         Request r = baseline();
         r.holdings.get(0).unitPrice = "0.01";
         success(r, "1000000", "0", "-45.45", "0", "0");
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "TC_BND_006: High stock price in wholeMode={0}")
     @ValueSource(booleans = {false, true})
     @Tag("low")
+    @DisplayName("TC_BND_006: High stock price ($600,000) exceeding portfolio asset value")
     void TC_BND_006_priceExceedsAssets(boolean whole) throws Exception {
         Request r = baseline();
         r.holdings.get(0).symbol = "BRK.A";
@@ -238,7 +276,7 @@ class PortfolioRebalancingTest {
         }
         Result result = success(r, whole ? "0" : "0.0167", "0", whole ? "-45" : "-45.4545", "0", "0");
         if (whole) {
-            assertNotNull(result.warnings);
+            assertNotNull(result.warnings, "Warnings list must not be null");
             assertTrue(
                     result.warnings.stream().anyMatch(w -> w != null && !w.trim().isEmpty()),
                     "Unreachable whole-share target needs a warning"
@@ -248,6 +286,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("high")
+    @DisplayName("TC_NEG_001: Reject target percentage sum < 100% (Sum: 90%)")
     void TC_NEG_001_targetBelow100() throws Exception {
         Request r = baseline();
         r.holdings.get(0).targetPercent = "10";
@@ -256,15 +295,17 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("high")
+    @DisplayName("TC_NEG_002: Reject target percentage sum > 100% (Sum: 110%)")
     void TC_NEG_002_targetAbove100() throws Exception {
         Request r = baseline();
         r.holdings.get(0).targetPercent = "30";
         rejected(r, "Total Target Percentage cannot exceed 100% (Current sum: 110%).");
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "TC_NEG_003: Invalid current sum with currentPercent={0}")
     @ValueSource(strings = {"5", "15"})
     @Tag("high")
+    @DisplayName("TC_NEG_003: Reject current portfolio allocation sum not equal to 100%")
     void TC_NEG_003_invalidCurrentSum(String current) throws Exception {
         Request r = baseline();
         r.holdings.get(0).currentPercent = current;
@@ -273,6 +314,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("high")
+    @DisplayName("TC_NEG_004: Reject unit price = $0 (Division by zero protection)")
     void TC_NEG_004_zeroPrice() throws Exception {
         Request r = baseline();
         r.holdings.get(0).unitPrice = "0";
@@ -281,6 +323,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("medium")
+    @DisplayName("TC_NEG_005: Reject negative unit price")
     void TC_NEG_005_negativePrice() throws Exception {
         Request r = baseline();
         r.holdings.get(0).unitPrice = "-150";
@@ -289,6 +332,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("medium")
+    @DisplayName("TC_NEG_006: Reject negative target percentage")
     void TC_NEG_006_negativeTarget() throws Exception {
         Request r = baseline();
         r.holdings.get(0).targetPercent = "-10";
@@ -298,6 +342,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("medium")
+    @DisplayName("TC_NEG_007: Reject negative current percentage (Short positions not supported)")
     void TC_NEG_007_negativeCurrent() throws Exception {
         Request r = baseline();
         r.holdings.get(0).currentPercent = "-10";
@@ -305,9 +350,10 @@ class PortfolioRebalancingTest {
         rejected(r, "Current percentage for IBM cannot be negative (Short positions not supported in long-only account).");
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "TC_NEG_008: Non-positive assets={0}")
     @ValueSource(strings = {"0", "-100000"})
     @Tag("medium")
+    @DisplayName("TC_NEG_008: Reject negative Total Asset and handle NO_ASSETS on $0")
     void TC_NEG_008_nonPositiveAssets(String assets) throws Exception {
         Request r = baseline();
         r.totalAsset = assets;
@@ -315,21 +361,24 @@ class PortfolioRebalancingTest {
             rejected(r, "Total Asset value cannot be negative.");
         } else {
             Result result = application.rebalance(r);
-            assertNotNull(result);
-            assertEquals(Status.NO_ASSETS, result.status);
-            assertNotNull(result.message);
-            assertFalse(result.message.trim().isEmpty());
-            assertNotNull(result.orders);
-            assertTrue(result.orders.isEmpty());
-            assertNotNull(result.positions);
-            result.positions.forEach(p -> equalNumber("0", p.signedShares, "Zero assets must not trade"));
+            assertNotNull(result, "Application returned null Result");
+            assertAll("Zero assets validation",
+                    () -> assertEquals(Status.NO_ASSETS, result.status),
+                    () -> assertNotNull(result.message),
+                    () -> assertFalse(result.message.trim().isEmpty(), "Message should explain zero assets"),
+                    () -> assertNotNull(result.orders),
+                    () -> assertTrue(result.orders.isEmpty(), "Zero assets must not queue orders"),
+                    () -> assertNotNull(result.positions),
+                    () -> result.positions.forEach(p -> equalNumber("0", p.signedShares, "Zero assets must not trade"))
+            );
         }
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "TC_NEG_009: Invalid input payload='{0}'")
     @NullSource
     @ValueSource(strings = {"abc", "$150#", ""})
     @Tag("low")
+    @DisplayName("TC_NEG_009: Input sanitization rejecting non-numeric and null values")
     void TC_NEG_009_invalidNumericFields(String invalid) throws Exception {
         // Independent requests ensure each field's validation is reached.
         Request target = baseline();
@@ -355,6 +404,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("low")
+    @DisplayName("TC_NEG_010: Reject duplicate security tickers in same portfolio (IBM)")
     void TC_NEG_010_duplicateTicker() throws Exception {
         Request r = baseline();
         r.holdings.get(1).symbol = "IBM";
@@ -365,6 +415,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("high")
+    @DisplayName("TC_DOM_001: 50% partial vesting scales trade amounts proportionally")
     void TC_DOM_001_partialVesting() throws Exception {
         Request r = baseline();
         r.vestedPercent = "50";
@@ -373,6 +424,7 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("high")
+    @DisplayName("TC_DOM_002: Self-funding constraint in whole share mode prevents cash overdraft")
     void TC_DOM_002_wholeSharesSelfFunding() throws Exception {
         Request r = baseline();
         r.mode = Mode.WHOLE;
@@ -388,12 +440,15 @@ class PortfolioRebalancingTest {
 
     @Test
     @Tag("medium")
+    @DisplayName("TC_DOM_003: Sells are queued before buys to ensure settlement and cash neutrality")
     void TC_DOM_003_sellsQueuedBeforeBuys() throws Exception {
         Result result = success(baseline(), "66.67", "0", "-45.45", "0", "0");
-        assertEquals(2, result.orders.size(), "Only IBM and ORCL require orders");
-        assertEquals("ORCL", result.orders.get(0).symbol);
-        equalNumber("-45.45", result.orders.get(0).signedShares, "First order sells ORCL");
-        assertEquals("IBM", result.orders.get(1).symbol);
-        equalNumber("66.67", result.orders.get(1).signedShares, "Second order buys IBM");
+        assertAll("Sell-before-buy trade queue verification",
+                () -> assertEquals(2, result.orders.size(), "Only IBM and ORCL require orders"),
+                () -> assertEquals("ORCL", result.orders.get(0).symbol),
+                () -> equalNumber("-45.45", result.orders.get(0).signedShares, "First order sells ORCL"),
+                () -> assertEquals("IBM", result.orders.get(1).symbol),
+                () -> equalNumber("66.67", result.orders.get(1).signedShares, "Second order buys IBM")
+        );
     }
 }

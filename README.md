@@ -2,11 +2,12 @@
 
 JUnit 5 tests cover all 26 manual case IDs in
 [portfolioRebalancingManualTestCases.md](portfolioRebalancingManualTestCases.md).
-There is no application implementation, mock rebalancing engine, or production source code.
+There is no production source code; test execution defaults to a Mockito-backed adapter
+simulating the portfolio rebalancing contract, or can be pointed to an external application adapter.
 Expected share quantities are explicit test data; `BigDecimal` comparisons ignore display scale
 without tolerating numerical differences. Each successful scenario checks every holding's
-signed shares and target variance. Test names retain the manual IDs and priorities are
-JUnit tags (`high`, `medium`, `low`).
+signed shares and target variance. Test names retain the manual IDs, priorities are
+JUnit tags (`high`, `medium`, `low`), and each test includes descriptive `@DisplayName` annotations.
 
 ## Connect the application
 
@@ -33,17 +34,23 @@ queue order; it must not be reordered by the adapter. Warnings come from the app
 Requires JDK 11+ and Gradle (Gradle Wrapper `./gradlew` is included).
 
 ```powershell
-# Run with default Mockito mock:
+# 1. Run full test suite with default Mockito mock:
 .\gradlew test
 
-# Run against a specific external adapter implementation:
+# 2. Run Smoke Test Suite (High priority tests only):
+.\gradlew smokeTest
+
+# 3. Run Regression Test Suite (Medium and Low priority edge cases):
+.\gradlew regressionTest
+
+# 4. Run against a specific external application adapter:
 .\gradlew test -Drebalancing.adapter=com.example.ActualApplicationAdapter
 
-# Check compilation only:
+# 5. Check test compilation only:
 .\gradlew testClasses
 ```
 
-Reports: `build/reports/tests/test/index.html`.
+Reports: `build/reports/tests/test/index.html` (or `build/reports/tests/smokeTest/index.html`).
 
 ## Explicit assumptions and manual-case clarifications
 
