@@ -1,1 +1,66 @@
-# charlesRiverStateStreetAssessment
+# Portfolio rebalancing automation (Java)
+
+JUnit 5 tests cover all 26 manual case IDs in
+[portfolioRebalancingManualTestCases.md](portfolioRebalancingManualTestCases.md).
+There is no application implementation, mock rebalancing engine, or production source code.
+Expected share quantities are explicit test data; `BigDecimal` comparisons ignore display scale
+without tolerating numerical differences. Each successful scenario checks every holding's
+signed shares and target variance. Test names retain the manual IDs and priorities are
+JUnit tags (`high`, `medium`, `low`).
+
+## Connect the application
+
+The assessment provides no API, UI, or Java entry point. Consequently these are contract
+tests awaiting a real application connection. Implement
+[`RebalancingAdapter`](src/test/java/assessment/RebalancingAdapter.java) in `src/test/java`
+with a public no-argument constructor. Its `rebalance` method must submit the supplied
+request to the actual application and map its observed response into `Result`.
+Do not calculate expected results in the adapter. The adapter may use a Java call, HTTP,
+or UI automation once the real interface is known; no endpoint or selectors are assumed here.
+Request objects are fresh per invocation. Use an isolated test account and reset any state
+in the adapter before each invocation if the application persists changes.
+
+The adapter contract uses percentage points (50 means 50%), signed share quantities,
+and `current - target` variance. It preserves raw numeric inputs so negative tests reach
+the application. Return non-null lists, including empty lists. Rejected requests return
+`VALIDATION_ERROR`, an observed user-facing message, and no positions/orders. Zero assets
+return `NO_ASSETS`, an explanatory message, and no orders. Successful requests return one
+position per holding, including zero-share positions. `orders` represents the actual
+queue order; it must not be reordered by the adapter. Warnings come from the application.
+
+## Run
+
+Requires JDK 11+ and Maven 3.6.3+ (dependencies must be available from Maven Central).
+
+```powershell
+mvn test '-Drebalancing.adapter=com.example.ActualApplicationAdapter'
+mvn test '-Drebalancing.adapter=com.example.ActualApplicationAdapter' '-Dgroups=high'
+mvn test-compile
+```
+
+Reports: `target/surefire-reports`. Running `mvn test` without an adapter intentionally
+fails setup with an explanatory message. It does not silently skip tests or report
+application behavior as passing. `test-compile` only checks compilation, not behavior.
+
+## Explicit assumptions and manual-case clarifications
+
+- Fractional mode uses two decimal places and HALF_UP rounding. Whole mode truncates
+  share magnitude toward zero, subject to available funding (not mathematical floor
+  of a negative number). No fees or taxes are included.
+- TC_BND_006 explicitly requests four decimal places (`0.0167`), conflicting with the
+  general two-decimal assumption. This test requests scale 4 for all holdings in that
+  scenario. A real application must support this configuration or the requirement
+  must be resolved before using this test as a release gate.
+- Abbreviated manual inputs are completed with baseline holdings to keep both
+  allocations at 100%. TC_BND_001 uses IBM target 19.9% to offset AAPL target 20.1%.
+  TC_POS_003 tests both price options; option B sets MSFT target 27% and price 100.
+- TC_NEG_010 selects the documented duplicate-rejection branch. It reuses the MSFT
+  row as a conflicting IBM row and keeps allocation totals at 100%, isolating the error.
+  A product that merges duplicates needs a separately agreed expected merged result.
+- Documented validation messages are checked as substrings; unspecified messages
+  must be non-empty. The adapter must preserve observed messages rather than invent them.
+- Fractional rounding does not guarantee exact zero variance, exact liquidation, or
+  self-funding. Baseline rounded buys cost 10,000.50 while sells yield 9,999.00.
+  TC_DOM_003 checks queue sequence only; it does not claim this resolves the 1.50
+  shortfall. Cash safety is asserted for whole-share mode in TC_DOM_002, matching the
+  manual scope. Fractional funding policy remains an open product requirement.
