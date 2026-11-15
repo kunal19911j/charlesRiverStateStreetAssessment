@@ -2,7 +2,7 @@
 
 Please be prepared to present this at your onsite interview. You will be required to bring your own tablet/computer to present during the interview.
 
-Thank you for your interest in a position with the Charles River Development (CRD) / Alpha Platform Engineering organization!
+Thank you for your interest in a position with our Platform Engineering organization!
 
 As a part of our technical interview process, we would like to ask each candidate to participate in a technical assessment exercise.
 
