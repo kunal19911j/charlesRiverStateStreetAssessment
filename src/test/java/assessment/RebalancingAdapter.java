@@ -3,12 +3,23 @@ package assessment;
 import java.math.BigDecimal;
 import java.util.List;
 
-/** Test-side boundary only. Implement this against the real application's API, UI, or Java entry point. */
+/**
+ * Test-side boundary only. Implement this against the real application's API, UI, or Java entry point.
+ */
 public interface RebalancingAdapter {
+
     Result rebalance(Request request) throws Exception;
 
-    enum Mode { FRACTIONAL, WHOLE }
-    enum Status { SUCCESS, VALIDATION_ERROR, NO_ASSETS }
+    enum Mode {
+        FRACTIONAL,
+        WHOLE
+    }
+
+    enum Status {
+        SUCCESS,
+        VALIDATION_ERROR,
+        NO_ASSETS
+    }
 
     final class Request {
         public String totalAsset = "100000";
@@ -18,12 +29,19 @@ public interface RebalancingAdapter {
         public int fractionalScale = 2;
         public List<Holding> holdings;
 
-        public Request(List<Holding> holdings) { this.holdings = holdings; }
+        public Request(List<Holding> holdings) {
+            this.holdings = holdings;
+        }
     }
 
-    /** Strings intentionally retain malformed and null inputs for validation tests. */
+    /**
+     * Strings intentionally retain malformed and null inputs for validation tests.
+     */
     final class Holding {
-        public String symbol, targetPercent, currentPercent, unitPrice;
+        public String symbol;
+        public String targetPercent;
+        public String currentPercent;
+        public String unitPrice;
 
         public Holding(String symbol, String target, String current, String price) {
             this.symbol = symbol;
@@ -35,7 +53,8 @@ public interface RebalancingAdapter {
 
     final class Position {
         public final String symbol;
-        public final BigDecimal variance, signedShares;
+        public final BigDecimal variance;
+        public final BigDecimal signedShares;
 
         public Position(String symbol, BigDecimal variance, BigDecimal signedShares) {
             this.symbol = symbol;
@@ -44,7 +63,9 @@ public interface RebalancingAdapter {
         }
     }
 
-    /** Orders are returned in the actual queue/execution sequence. Positive shares buy; negative sell. */
+    /**
+     * Orders are returned in the actual queue/execution sequence. Positive shares buy; negative sell.
+     */
     final class Order {
         public final String symbol;
         public final BigDecimal signedShares;
@@ -62,8 +83,13 @@ public interface RebalancingAdapter {
         public final List<Order> orders;
         public final List<String> warnings;
 
-        public Result(Status status, String message, List<Position> positions,
-                      List<Order> orders, List<String> warnings) {
+        public Result(
+                Status status,
+                String message,
+                List<Position> positions,
+                List<Order> orders,
+                List<String> warnings
+        ) {
             this.status = status;
             this.message = message;
             this.positions = positions;
