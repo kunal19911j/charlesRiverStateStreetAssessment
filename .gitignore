@@ -1,0 +1,23 @@
+# Gradle build and cache outputs
+.gradle/
+build/
+reports/
+
+# Legacy Maven output
+target/
+
+# IDE / Editor configuration
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
