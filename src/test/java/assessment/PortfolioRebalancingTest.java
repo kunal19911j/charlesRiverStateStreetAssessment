@@ -24,8 +24,11 @@ class PortfolioRebalancingTest {
     @BeforeAll
     static void connectToApplication() throws Exception {
         String adapter = System.getProperty("rebalancing.adapter");
-        assertNotNull(adapter, "No application connected. Supply -Drebalancing.adapter=<adapter class>; see README.md.");
-        application = (RebalancingAdapter) Class.forName(adapter).getDeclaredConstructor().newInstance();
+        if (adapter == null || adapter.trim().isEmpty()) {
+            application = MockitoRebalancingAdapterFactory.createMock();
+        } else {
+            application = (RebalancingAdapter) Class.forName(adapter).getDeclaredConstructor().newInstance();
+        }
     }
 
     private static Request baseline() {

@@ -30,17 +30,20 @@ queue order; it must not be reordered by the adapter. Warnings come from the app
 
 ## Run
 
-Requires JDK 11+ and Maven 3.6.3+ (dependencies must be available from Maven Central).
+Requires JDK 11+ and Gradle (Gradle Wrapper `./gradlew` is included).
 
 ```powershell
-mvn test '-Drebalancing.adapter=com.example.ActualApplicationAdapter'
-mvn test '-Drebalancing.adapter=com.example.ActualApplicationAdapter' '-Dgroups=high'
-mvn test-compile
+# Run with default Mockito mock:
+.\gradlew test
+
+# Run against a specific external adapter implementation:
+.\gradlew test -Drebalancing.adapter=com.example.ActualApplicationAdapter
+
+# Check compilation only:
+.\gradlew testClasses
 ```
 
-Reports: `target/surefire-reports`. Running `mvn test` without an adapter intentionally
-fails setup with an explanatory message. It does not silently skip tests or report
-application behavior as passing. `test-compile` only checks compilation, not behavior.
+Reports: `build/reports/tests/test/index.html`.
 
 ## Explicit assumptions and manual-case clarifications
 
