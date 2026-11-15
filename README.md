@@ -2,6 +2,13 @@
 
 ---
 
+## Documentation & Specification Links
+
+- **Problem Statement & Prompts:** [`technicalAssessment.md`](technicalAssessment.md) — The original assessment problem statement, baseline portfolio specifications (Account ABC), and evaluation questions.
+- **Manual Test Plan:** [`portfolioRebalancingManualTestCases.md`](portfolioRebalancingManualTestCases.md) — 26 detailed manual test scenarios with priority classifications (High, Medium, Low), calculation formulas, preconditions, and expected results.
+
+---
+
 ## Architecture Overview
 
 ```
