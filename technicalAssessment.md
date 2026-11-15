@@ -1,13 +1,5 @@
 # Technical Assessment
 
-Please be prepared to present this at your onsite interview. You will be required to bring your own tablet/computer to present during the interview.
-
-Thank you for your interest in a position with our Platform Engineering organization!
-
-As a part of our technical interview process, we would like to ask each candidate to participate in a technical assessment exercise.
-
-Please read through the problem below and answer the questions highlighted in yellow.
-
 ---
 
 ## Problem Statement
@@ -39,12 +31,6 @@ Please read through the problem below and answer the questions highlighted in ye
 
 Assume that this rebalancing problem is your team's application that you are going to test. Please write your **manual test cases** and **automated test cases** to test the application.
 
-1. Recommended time for this task is 2–4 hours; please feel free to research.
-2. You can use any language/testing tool to code your automated test cases for this scenario and make any reasonable assumptions.
-3. The tests should validate that the total number of shares to buy and sell for each security is correct, as this is the application's output.
-4. Please be prepared to discuss the logic, test cases, and coded implementation during the interview.
+1. You can use any language/testing tool to code your automated test cases for this scenario and make any reasonable assumptions.
+2. The tests should validate that the total number of shares to buy and sell for each security is correct, as this is the application's output.
 
-*\*If you make any assumptions, please note that.*
-
----
-*Information Classification: Limited Access*

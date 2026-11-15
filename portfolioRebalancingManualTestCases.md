@@ -1,4 +1,4 @@
-# Portfolio Rebalancing Application — QA Technical Assessment
+# Portfolio Rebalancing Application — Manual Test Cases
 
 ## 1. Problem Analysis & Answers to Assessment Questions
 
