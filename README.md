@@ -74,3 +74,12 @@ Reports: `build/reports/tests/test/index.html` (or `build/reports/tests/smokeTes
   TC_DOM_003 checks queue sequence only; it does not claim this resolves the 1.50
   shortfall. Cash safety is asserted for whole-share mode in TC_DOM_002, matching the
   manual scope. Fractional funding policy remains an open product requirement.
+
+## Open Questions & Requirements Clarifications for Product / Engineering
+
+1. **Fractional Share Funding & Rounding Discrepancy Policy:**
+   - **Context:** When rounding fractional shares to two decimal places using standard `HALF_UP` rounding, total rebalance dollar amounts can diverge from target allocations. In the baseline scenario, selling ORCL generates **$9,999.00** ($45.45 \times \$220$), but buying IBM requires **$10,000.50** ($66.67 \times \$150$), leaving a **$1.50 cash deficit** if no spare cash is available. Conversely, scenarios where buys round down and sells round up could leave unallocated residual cash (e.g. allocating $9,999 instead of $10,000).
+   - **Clarification Needed:** If fractional share rebalancing is supported in production, how should the application handle rounded allocation totals that diverge from the target (e.g. total executed buy value equals **$10,001** or **$9,999** instead of **$10,000**)?
+     - *Option A (Target-First / Standard HALF_UP):* Prioritize reaching target percentage weightings as closely as possible (as shown in the assessment table with IBM = 66.67), assuming an account cash buffer/sweep vehicle absorbs small penny-level rounding differences.
+     - *Option B (Cash-First / Buy Curtailment):* Strictly enforce self-funding so recommendations never exceed sell proceeds plus available cash, truncating or curtailing the last buy order (e.g. buying 66.66 IBM = $9,999.00 to prevent cash overdrafts).
+     - *Option C (Residual Cash Sweep):* Sweep any rounding surplus or deficit into a designated default cash holding.
